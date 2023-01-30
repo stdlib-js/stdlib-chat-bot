@@ -32,11 +32,17 @@ import { join } from 'path';
 
 // TYPES //
 
-type CreateCommentResponse = Promise<RestEndpointMethodTypes["issues"]["createComment"]["response"]["data"]>	;
+type CreateCommentResponse = Promise<RestEndpointMethodTypes["issues"]["createComment"]["response"]["data"]>;
 type CreateCommentParams = {
 	owner: string;
 	repo: string;
 	issueNumber: number;
+	body: string;
+};
+type Comment = {
+	author: {
+		login: string;
+	};
 	body: string;
 };
 
@@ -89,6 +95,34 @@ function appendDisclaimer( str: string ): string {
 }
 
 /**
+* Strips a disclaimer from a string containing an answer.
+*
+* @private
+* @param str - string from which to strip disclaimer
+* @returns string with disclaimer stripped
+*/
+function stripDisclaimer( str: string ): string {
+	return str.replace( /### Disclaimer[\s\S]+$/, '' );
+}
+
+/**
+* Generates a history string for the prompt based on previous comments in a discussion or issue.
+* 
+* @private
+* @param comments - comments
+* @returns history string
+*/
+function generateHistory( comments: Array<Comment> ): string {
+	let history = '';
+	for ( let i = 0; i < comments.length; i++ ) {
+		const comment = comments[ i ];
+		history += comment.author.login+': '+stripDisclaimer( comment.body );
+		history += '\n';
+	}
+	return history;
+}
+
+/**
 * Creates a comment on an issue.
 * 
 * @private
@@ -99,7 +133,7 @@ function appendDisclaimer( str: string ): string {
 * @param options.body - comment body
 * @returns promise resolving to the response data
 */
-async function createComment({ owner, repo, issueNumber, body }: CreateCommentParams): Promise<CreateCommentResponse> {
+async function createComment({ owner, repo, issueNumber, body }: CreateCommentParams): CreateCommentResponse {
 	const response = await octokit.issues.createComment({
 		'owner': owner,
 		'repo': repo,
@@ -107,6 +141,22 @@ async function createComment({ owner, repo, issueNumber, body }: CreateCommentPa
 		'body': body
 	});
 	return response.data;
+}
+
+async function getIssueComments(): Promise<Array<Comment>> {
+	const response = await octokit.issues.listComments({
+		'owner': context.repo.owner,
+		'repo': context.repo.repo,
+		'issue_number': context.payload.issue.number
+	});
+	return response.data.map( o => {
+		return {
+			'author': {
+				'login': o.user.login
+			},
+			'body': o.body
+		};
+	});
 }
 
 /**
@@ -139,7 +189,7 @@ async function addDiscussionComment( discussionId, body ) {
 }
 
 /**
-* Returns the comments for a discussion.
+* Returns the comments for a discussion via the GitHub GraphQL API.
 *
 * @private
 * @param discussionId - discussion id
@@ -227,19 +277,13 @@ async function main(): Promise<void> {
 		let conversationHistory;
 		switch ( context.eventName ) {
 			case 'issue_comment': {
-				// Get all comments on the issue:
-				const comments = await octokit.issues.listComments({
-					'owner': context.repo.owner,
-					'repo': context.repo.repo,
-					'issue_number': context.payload.issue.number
-				});
-				conversationHistory = comments.data.map( x => x.body ).join( '\n' );
+				const comments = await getIssueComments();
+				conversationHistory = generateHistory( comments );
 			}
 			break;
 			case 'discussion_comment': {
-				// Get all comments on the discussion via the GraphQL API:
 				const comments = await getDiscussionComments( context.payload.discussion.node_id );
-				conversationHistory = comments.map( x => x.body ).join( '\n' );
+				conversationHistory = generateHistory( comments );
 			}
 			break;
 		}

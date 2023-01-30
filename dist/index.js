@@ -68,6 +68,32 @@ function appendDisclaimer(str) {
     return str + '\n\n### Disclaimer\n\n-   This answer was generated with the help of AI and is not guaranteed to be correct. We will review the answer and update it if necessary.\n-   You can also ask follow-up questions to clarify the answer or request additional information by leaving a comment on this issue starting with `/ask`.';
 }
 /**
+* Strips a disclaimer from a string containing an answer.
+*
+* @private
+* @param str - string from which to strip disclaimer
+* @returns string with disclaimer stripped
+*/
+function stripDisclaimer(str) {
+    return str.replace(/### Disclaimer[\s\S]+$/, '');
+}
+/**
+* Generates a history string for the prompt based on previous comments in a discussion or issue.
+*
+* @private
+* @param comments - comments
+* @returns history string
+*/
+function generateHistory(comments) {
+    let history = '';
+    for (let i = 0; i < comments.length; i++) {
+        const comment = comments[i];
+        history += comment.author.login + ': ' + stripDisclaimer(comment.body);
+        history += '\n';
+    }
+    return history;
+}
+/**
 * Creates a comment on an issue.
 *
 * @private
@@ -86,6 +112,21 @@ async function createComment({ owner, repo, issueNumber, body }) {
         'body': body
     });
     return response.data;
+}
+async function getIssueComments() {
+    const response = await octokit.issues.listComments({
+        'owner': github_1.context.repo.owner,
+        'repo': github_1.context.repo.repo,
+        'issue_number': github_1.context.payload.issue.number
+    });
+    return response.data.map(o => {
+        return {
+            'author': {
+                'login': o.user.login
+            },
+            'body': o.body
+        };
+    });
 }
 /**
 * Adds a comment to a discussion.
@@ -116,7 +157,7 @@ async function addDiscussionComment(discussionId, body) {
     return result;
 }
 /**
-* Returns the comments for a discussion.
+* Returns the comments for a discussion via the GitHub GraphQL API.
 *
 * @private
 * @param discussionId - discussion id
@@ -199,20 +240,14 @@ async function main() {
         switch (github_1.context.eventName) {
             case 'issue_comment':
                 {
-                    // Get all comments on the issue:
-                    const comments = await octokit.issues.listComments({
-                        'owner': github_1.context.repo.owner,
-                        'repo': github_1.context.repo.repo,
-                        'issue_number': github_1.context.payload.issue.number
-                    });
-                    conversationHistory = comments.data.map(x => x.body).join('\n');
+                    const comments = await getIssueComments();
+                    conversationHistory = generateHistory(comments);
                 }
                 break;
             case 'discussion_comment':
                 {
-                    // Get all comments on the discussion via the GraphQL API:
                     const comments = await getDiscussionComments(github_1.context.payload.discussion.node_id);
-                    conversationHistory = comments.map(x => x.body).join('\n');
+                    conversationHistory = generateHistory(comments);
                 }
                 break;
         }
