@@ -53,9 +53,20 @@ const PROMPT = `I am a highly intelligent question answering bot for programming
 I will answer below question by referencing the following packages from the project:
 {{files}}
 
+{{history}}
 Question: {{question}}
 Answer:`;
 // FUNCTIONS //
+/**
+* Appends a disclaimer to a string containing an answer outlining that the answer was generated with the help of AI and is not guaranteed to be correct.
+*
+* @private
+* @param str - string to which to append disclaimer
+* @returns string with disclaimer appended
+*/
+function appendDisclaimer(str) {
+    return str + '\n\n## Warning\n\nThis answer was generated with the help of AI and is not guaranteed to be correct. We will review the answer and update it if necessary.';
+}
 /**
 * Creates a comment on an issue.
 *
@@ -105,6 +116,38 @@ async function addDiscussionComment(discussionId, body) {
     return result;
 }
 /**
+* Returns the comments for a discussion.
+*
+* @private
+* @param discussionId - discussion id
+* @returns promise resolving to the comments
+*/
+async function getDiscussionComments(discussionId) {
+    const query = `
+		query ($discussionId: ID!) {
+		node(id: $discussionId) {
+			... on Discussion {
+			comments(first: 100) {
+				nodes {
+				author {
+					login
+				}
+				body
+				}
+			}
+			}
+		}
+		}
+	`;
+    const variables = {
+        discussionId
+    };
+    const result = await graphqlWithAuth(query, variables);
+    (0, core_1.info)('Successfully retrieved comments from discussion.');
+    (0, core_1.info)(JSON.stringify(result));
+    return result.node.comments.nodes;
+}
+/**
 * Computes the cosine similarity between two embedding vectors.
 *
 * ## Notes
@@ -152,6 +195,28 @@ async function main() {
         // Only keep the top three embeddings that have a similarity greater than 0.6:
         const top = similarities.filter(x => x.similarity > 0.6).slice(0, 3);
         (0, core_1.debug)('Kept top ' + top.length + ' embeddings as context.');
+        let conversationHistory;
+        switch (github_1.context.eventName) {
+            case 'issue_comment':
+                {
+                    // Get all comments on the issue:
+                    const comments = await octokit.issues.listComments({
+                        'owner': github_1.context.repo.owner,
+                        'repo': github_1.context.repo.repo,
+                        'issue_number': github_1.context.payload.issue.number
+                    });
+                    conversationHistory = comments.data.map(x => x.body).join('\n');
+                }
+                break;
+            case 'discussion_comment':
+                {
+                    // Get all comments on the discussion via the GraphQL API:
+                    const comments = await getDiscussionComments(github_1.context.payload.discussion.id);
+                    conversationHistory = comments.map(x => x.body).join('\n');
+                }
+                break;
+        }
+        (0, core_1.info)('Conversation history: ' + conversationHistory);
         const prompt = PROMPT
             .replace('{{files}}', top.map(x => {
             let readme = x.embedding.content;
@@ -175,6 +240,7 @@ async function main() {
             readme = readme.replace(/\n{3,}/g, '\n\n');
             return `Package: ${x.embedding.package}\nText: ${readme}`;
         }).join('\n\n'))
+            .replace('{{history}}', conversationHistory ? `History:\n${conversationHistory}\n` : '')
             .replace('{{question}}', question);
         (0, core_1.debug)('Assembled prompt: ' + prompt);
         const completionResult = await openai.createCompletion({
@@ -185,7 +251,7 @@ async function main() {
             'model': 'text-davinci-003'
         });
         (0, core_1.debug)('Successfully created completion.');
-        const answer = completionResult.data.choices[0].text;
+        const answer = appendDisclaimer(completionResult.data.choices[0].text);
         switch (github_1.context.eventName) {
             case 'issue_comment':
             case 'issues':
@@ -217,14 +283,14 @@ async function main() {
                     owner: github_1.context.repo.owner,
                     repo: github_1.context.repo.repo,
                     issueNumber: github_1.context.issue.number,
-                    body: 'Sorry, I could not answer your question.'
+                    body: 'Sorry, I was not able to answer your question.'
                 });
                 (0, core_1.debug)('Successfully created comment.');
                 break;
             case 'discussion_comment':
             case 'discussion':
                 (0, core_1.debug)('Triggered by discussion comment or discussion.');
-                addDiscussionComment(github_1.context.payload.discussion.node_id, 'Sorry, I could not answer your question.');
+                addDiscussionComment(github_1.context.payload.discussion.node_id, 'Sorry, I was not able to answer your question.');
                 (0, core_1.debug)('Successfully created comment.');
                 break;
             default:

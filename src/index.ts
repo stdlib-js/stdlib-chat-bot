@@ -23,7 +23,7 @@
 import { OpenAIApi , Configuration } from 'openai';
 import { error, debug, info, getInput, setFailed } from '@actions/core';
 import { context } from '@actions/github';
-import { graphql } from '@octokit/graphql';
+import { graphql, GraphQlQueryResponseData } from '@octokit/graphql';
 import { Octokit } from '@octokit/rest';
 import type { RestEndpointMethodTypes } from '@octokit/plugin-rest-endpoint-methods';
 import { readFile } from 'fs/promises';
@@ -70,11 +70,23 @@ const PROMPT = `I am a highly intelligent question answering bot for programming
 I will answer below question by referencing the following packages from the project:
 {{files}}
 
+{{history}}
 Question: {{question}}
 Answer:`;
 
 
 // FUNCTIONS //
+
+/**
+* Appends a disclaimer to a string containing an answer outlining that the answer was generated with the help of AI and is not guaranteed to be correct.
+*
+* @private
+* @param str - string to which to append disclaimer
+* @returns string with disclaimer appended
+*/
+function appendDisclaimer( str: string ): string {
+	return str + '\n\n## Warning\n\nThis answer was generated with the help of AI and is not guaranteed to be correct. We will review the answer and update it if necessary.';
+}
 
 /**
 * Creates a comment on an issue.
@@ -124,6 +136,39 @@ async function addDiscussionComment( discussionId, body ) {
 	info( 'Successfully added comment to discussion.' );
 	info( JSON.stringify( result ) );
 	return result;
+}
+
+/**
+* Returns the comments for a discussion.
+*
+* @private
+* @param discussionId - discussion id
+* @returns promise resolving to the comments
+*/
+async function getDiscussionComments( discussionId ) {
+	const query = `
+		query ($discussionId: ID!) {
+		node(id: $discussionId) {
+			... on Discussion {
+			comments(first: 100) {
+				nodes {
+				author {
+					login
+				}
+				body
+				}
+			}
+			}
+		}
+		}
+	`;
+	const variables = {
+		discussionId
+	};
+	const result: GraphQlQueryResponseData = await graphqlWithAuth( query, variables );
+	info( 'Successfully retrieved comments from discussion.' );
+	info( JSON.stringify( result ) );
+	return result.node.comments.nodes;
 }
 
 /**
@@ -179,6 +224,26 @@ async function main(): Promise<void> {
 		const top = similarities.filter( x => x.similarity > 0.6 ).slice( 0, 3 );
 		debug( 'Kept top '+top.length+' embeddings as context.' );
 		
+		let conversationHistory;
+		switch ( context.eventName ) {
+			case 'issue_comment': {
+				// Get all comments on the issue:
+				const comments = await octokit.issues.listComments({
+					'owner': context.repo.owner,
+					'repo': context.repo.repo,
+					'issue_number': context.payload.issue.number
+				});
+				conversationHistory = comments.data.map( x => x.body ).join( '\n' );
+			}
+			break;
+			case 'discussion_comment': {
+				// Get all comments on the discussion via the GraphQL API:
+				const comments = await getDiscussionComments( context.payload.discussion.id );
+				conversationHistory = comments.map( x => x.body ).join( '\n' );
+			}
+			break;
+		}
+		info( 'Conversation history: '+conversationHistory );
 		const prompt = PROMPT
 			.replace( '{{files}}', top.map( x => {
 				let readme = x.embedding.content;
@@ -212,6 +277,7 @@ async function main(): Promise<void> {
 				
 				return `Package: ${x.embedding.package}\nText: ${readme}`;
 			}).join( '\n\n' ) )
+			.replace( '{{history}}', conversationHistory ? `History:\n${conversationHistory}\n` : '' )
 			.replace( '{{question}}', question );
 			
 		debug( 'Assembled prompt: '+prompt );
@@ -223,7 +289,7 @@ async function main(): Promise<void> {
 			'model': 'text-davinci-003'
 		});
 		debug( 'Successfully created completion.' );
-		const answer = completionResult.data.choices[ 0 ].text;
+		const answer = appendDisclaimer( completionResult.data.choices[ 0 ].text );
 		switch ( context.eventName ) {
 		case 'issue_comment':
 		case 'issues':
@@ -254,14 +320,14 @@ async function main(): Promise<void> {
 				owner: context.repo.owner,
 				repo: context.repo.repo,
 				issueNumber: context.issue.number,
-				body: 'Sorry, I could not answer your question.'
+				body: 'Sorry, I was not able to answer your question.'
 			});
 			debug( 'Successfully created comment.' );
 		break;
 		case 'discussion_comment':
 		case 'discussion':
 			debug( 'Triggered by discussion comment or discussion.' );
-			addDiscussionComment( context.payload.discussion.node_id, 'Sorry, I could not answer your question.' );
+			addDiscussionComment( context.payload.discussion.node_id, 'Sorry, I was not able to answer your question.' );
 			debug( 'Successfully created comment.' );
 		break;
 		default:
