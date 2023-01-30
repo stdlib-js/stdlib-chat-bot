@@ -22,23 +22,52 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const openai_1 = require("openai");
 const core_1 = require("@actions/core");
 const github_1 = require("@actions/github");
+const graphql_1 = require("@octokit/graphql");
 const rest_1 = require("@octokit/rest");
 const promises_1 = require("fs/promises");
 const path_1 = require("path");
+// VARIABLES //
+const OPENAI_API_KEY = (0, core_1.getInput)('OPENAI_API_KEY', {
+    required: true
+});
+const GITHUB_TOKEN = (0, core_1.getInput)('GITHUB_TOKEN', {
+    required: true
+});
+const question = (0, core_1.getInput)('question', {
+    required: true
+});
+const graphqlWithAuth = graphql_1.graphql.defaults({
+    headers: {
+        authorization: `token ${GITHUB_TOKEN}`
+    },
+});
+const octokit = new rest_1.Octokit({
+    auth: GITHUB_TOKEN
+});
+const config = new openai_1.Configuration({
+    'apiKey': OPENAI_API_KEY
+});
+const openai = new openai_1.OpenAIApi(config);
+const PROMPT = `I am a highly intelligent question answering bot for programming questions in JavaScript. If you ask me a question that is rooted in truth, I will give you the answer. If you ask me a question that is nonsense, trickery, is not related to the stdlib-js / @stdlib project for JavaScript and Node.js or has no clear answer, I will respond with "Unknown.". If the requested functionality is not available or cannot be implemented using stdlib, I will respond with "Not yet implemented.". I will include example code if relevant to the question, formatted as GitHub Flavored Markdown code blocks.
+
+I will answer below question by referencing the following packages from the project:
+{{files}}
+
+Question: {{question}}
+Answer:`;
 // FUNCTIONS //
 /**
 * Creates a comment on an issue.
 *
 * @private
 * @param options - function options
-* @param options.octokit - octokit instance
 * @param options.owner - repository owner
 * @param options.repo - repository name
 * @param options.issueNumber - issue number
 * @param options.body - comment body
 * @returns promise resolving to the response data
 */
-async function createComment({ octokit, owner, repo, issueNumber, body }) {
+async function createComment({ owner, repo, issueNumber, body }) {
     const response = await octokit.issues.createComment({
         'owner': owner,
         'repo': repo,
@@ -46,6 +75,34 @@ async function createComment({ octokit, owner, repo, issueNumber, body }) {
         'body': body
     });
     return response.data;
+}
+/**
+* Adds a comment to a discussion.
+*
+* @private
+* @param discussionId - discussion id
+* @param body - comment body
+* @returns promise resolving to the comment
+*/
+async function addDiscussionComment(discussionId, body) {
+    const query = `
+		mutation ($discussionId: ID!, $body: String!) {
+		addDiscussionComment(input:{discussionId: $discussionId, body: $body}) {
+			discussionComment {
+			id
+			body
+			}
+		}
+		}
+	`;
+    const variables = {
+        discussionId,
+        body
+    };
+    const result = await graphqlWithAuth(query, variables);
+    (0, core_1.info)('Successfully added comment to discussion.');
+    (0, core_1.info)(JSON.stringify(result));
+    return result;
 }
 /**
 * Computes the cosine similarity between two embedding vectors.
@@ -66,27 +123,6 @@ function vectorSimilarity(x, y) {
     }
     return sum;
 }
-// VARIABLES //
-const OPENAI_API_KEY = (0, core_1.getInput)('OPENAI_API_KEY', {
-    required: true
-});
-const GITHUB_TOKEN = (0, core_1.getInput)('GITHUB_TOKEN', {
-    required: true
-});
-const question = (0, core_1.getInput)('question', {
-    required: true
-});
-const config = new openai_1.Configuration({
-    'apiKey': OPENAI_API_KEY
-});
-const openai = new openai_1.OpenAIApi(config);
-const PROMPT = `I am a highly intelligent question answering bot for programming questions in JavaScript. If you ask me a question that is rooted in truth, I will give you the answer. If you ask me a question that is nonsense, trickery, is not related to the stdlib-js / @stdlib project for JavaScript and Node.js or has no clear answer, I will respond with "Unknown.". If the requested functionality is not available or cannot be implemented using stdlib, I will respond with "Not yet implemented.". I will include example code if relevant to the question, formatted as GitHub Flavored Markdown code blocks.
-
-I will answer below question by referencing the following packages from the project:
-{{files}}
-
-Question: {{question}}
-Answer:`;
 // MAIN //
 /**
 * Main function.
@@ -150,14 +186,21 @@ async function main() {
         });
         (0, core_1.debug)('Successfully created completion.');
         const answer = completionResult.data.choices[0].text;
-        await createComment({
-            octokit: new rest_1.Octokit({ auth: GITHUB_TOKEN }),
-            owner: github_1.context.repo.owner,
-            repo: github_1.context.repo.repo,
-            issueNumber: github_1.context.issue.number,
-            body: answer
-        });
-        (0, core_1.debug)('Successfully created comment.');
+        if (github_1.context.eventName === 'issue_comment') {
+            (0, core_1.debug)('Triggered by issue comment.');
+            await createComment({
+                owner: github_1.context.repo.owner,
+                repo: github_1.context.repo.repo,
+                issueNumber: github_1.context.issue.number,
+                body: answer
+            });
+            (0, core_1.debug)('Successfully created comment.');
+        }
+        else if (github_1.context.eventName === 'discussion_comment') {
+            (0, core_1.debug)('Triggered by discussion comment.');
+            addDiscussionComment(github_1.context.payload.discussion.id, answer);
+            (0, core_1.debug)('Successfully created comment.');
+        }
     }
     catch (err) {
         (0, core_1.error)(err);
