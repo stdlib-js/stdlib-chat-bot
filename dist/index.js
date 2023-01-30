@@ -61,11 +61,13 @@ const OPENAI_API_KEY = (0, core_1.getInput)('OPENAI_API_KEY', {
 const GITHUB_TOKEN = (0, core_1.getInput)('GITHUB_TOKEN', {
     required: true
 });
+const question = (0, core_1.getInput)('question', {
+    required: true
+});
 const config = new openai_1.Configuration({
     'apiKey': OPENAI_API_KEY
 });
 const openai = new openai_1.OpenAIApi(config);
-const input = process.argv[2];
 const PROMPT = `I am a highly intelligent question answering bot for programming questions in JavaScript. If you ask me a question that is rooted in truth, I will give you the answer. If you ask me a question that is nonsense, trickery, is not related to the stdlib-js / @stdlib project for JavaScript and Node.js or has no clear answer, I will respond with "Unknown.". If the requested functionality does not exist in the project, I will respond with "Not yet implemented.". I will include example code if relevant to the question, formatted as GitHub Flavored Markdown code blocks.
 
 I will answer below question by referencing the following packages from the project:
@@ -84,7 +86,7 @@ async function main() {
     const embeddings = JSON.parse(embeddingsJSON);
     try {
         const result = await openai.createEmbedding({
-            'input': input,
+            'input': question,
             'model': 'text-embedding-ada-002'
         });
         const embedding = result.data.data[0].embedding;
@@ -107,7 +109,7 @@ async function main() {
             content = content.replace(/```[\s\S]*?```/g, '');
             return `Path: ${x.embedding.path}\nText: ${content}`;
         }).join('\n\n'))
-            .replace('{{question}}', input);
+            .replace('{{question}}', question);
         const completionResult = await openai.createCompletion({
             'prompt': prompt,
             'max_tokens': 1500,
