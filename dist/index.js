@@ -88,9 +88,9 @@ async function addDiscussionComment(discussionId, body) {
     const query = `
 		mutation ($discussionId: ID!, $body: String!) {
 		addDiscussionComment(input:{discussionId: $discussionId, body: $body}) {
-			discussionComment {
-			id
-			body
+			comment {
+				id
+				body
 			}
 		}
 		}

@@ -31,6 +31,9 @@ jobs:
   respond:
     # Define a display name:
     name: 'Respond to question'
+    
+    # Define the conditions under which the job should run:
+    if : ( github.event.comment.body && startsWith( github.event.comment.body, '/ask ' ) ) || ( github.event.discussion.body && startsWith( github.event.discussion.body, '/ask ' ) )
 
     # Define the type of virtual host machine:
     runs-on: ubuntu-latest
@@ -47,4 +50,4 @@ jobs:
         with:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.CHATBOT_GITHUB_TOKEN }}
-          question: ${{ github.event.comment.body }}
+          question: ${{ github.event.comment.body || github.event.discussion.body }}
