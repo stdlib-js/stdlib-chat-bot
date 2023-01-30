@@ -47,5 +47,5 @@ jobs:
         uses: ./
         with:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CHATBOT_GITHUB_TOKEN }}
           question: ${{ github.event.comment.body }}
