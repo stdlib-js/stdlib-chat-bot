@@ -33,7 +33,7 @@ jobs:
     name: 'Respond to question'
     
     # Define the conditions under which the job should run:
-    if : ${{ startsWith(github.event.comment.body, '/ask ' }}
+    if : startsWith( github.event.comment.body, '/ask ' )
 
     # Define the type of virtual host machine:
     runs-on: ubuntu-latest
