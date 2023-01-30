@@ -1,0 +1,22 @@
+name: stdlib chat bot
+description: Action that provides a stdlib chat bot for GitHub issues and discussions.
+author: Philipp Burckhardt <pburckhardt@outlook.com>
+
+inputs:
+  OPENAI_API_KEY:
+    description: OpenAI API key for the GPT-3 API.
+    required: true
+  GITHUB_TOKEN:
+    description: GitHub token for interacting with the GitHub API.
+    required: true
+  comment:
+    description: Comment the bot should reply to.
+    required: true
+
+runs:
+  using: node16
+  main: dist/index.js
+
+branding:
+  icon: box
+  color: green
