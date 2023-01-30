@@ -89,6 +89,7 @@ async function main() {
             'input': question,
             'model': 'text-embedding-ada-002'
         });
+        (0, core_1.debug)('Successfully created embedding.');
         const embedding = result.data.data[0].embedding;
         const similarities = [];
         for (let i = 0; i < embeddings.length; i++) {
@@ -102,6 +103,7 @@ async function main() {
         similarities.sort((a, b) => b.similarity - a.similarity);
         // Only keep the top three embeddings that have a similarity greater than 0.6:
         const top = similarities.filter(x => x.similarity > 0.6).slice(0, 3);
+        (0, core_1.debug)('Kept top ' + top.length + ' embeddings as context.');
         const prompt = PROMPT
             .replace('{{files}}', top.map(x => {
             let readme = x.embedding.content;
@@ -120,6 +122,7 @@ async function main() {
             return `Path: ${x.embedding.path}\nText: ${readme}`;
         }).join('\n\n'))
             .replace('{{question}}', question);
+        (0, core_1.debug)('Assembled prompt: ' + prompt);
         const completionResult = await openai.createCompletion({
             'prompt': prompt,
             'max_tokens': 1500,
@@ -127,6 +130,7 @@ async function main() {
             'top_p': 1,
             'model': 'text-davinci-003'
         });
+        (0, core_1.debug)('Successfully created completion.');
         const answer = completionResult.data.choices[0].text;
         await createComment({
             octokit: new rest_1.Octokit({ auth: GITHUB_TOKEN }),
@@ -135,6 +139,7 @@ async function main() {
             issueNumber: github_1.context.issue.number,
             body: answer
         });
+        (0, core_1.debug)('Successfully created comment.');
     }
     catch (err) {
         (0, core_1.error)(err);

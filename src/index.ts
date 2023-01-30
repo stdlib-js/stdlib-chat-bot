@@ -21,7 +21,7 @@
 // MODULES //
 
 import { OpenAIApi , Configuration } from 'openai';
-import { error, getInput, setFailed } from '@actions/core';
+import { error, debug, getInput, setFailed } from '@actions/core';
 import { context } from '@actions/github';
 import { Octokit } from '@octokit/rest';
 import type { RestEndpointMethodTypes } from '@octokit/plugin-rest-endpoint-methods';
@@ -114,6 +114,7 @@ async function main(): Promise<void> {
 			'input': question,
 			'model': 'text-embedding-ada-002'
 		});
+		debug( 'Successfully created embedding.' );
 		const embedding = result.data.data[ 0 ].embedding;
 		const similarities = [];
 		for ( let i = 0; i < embeddings.length; i++ ) {
@@ -128,6 +129,7 @@ async function main(): Promise<void> {
 		
 		// Only keep the top three embeddings that have a similarity greater than 0.6:
 		const top = similarities.filter( x => x.similarity > 0.6 ).slice( 0, 3 );
+		debug( 'Kept top '+top.length+' embeddings as context.' );
 		
 		const prompt = PROMPT
 			.replace( '{{files}}', top.map( x => {
@@ -153,6 +155,8 @@ async function main(): Promise<void> {
 				return `Path: ${x.embedding.path}\nText: ${readme}`;
 			}).join( '\n\n' ) )
 			.replace( '{{question}}', question );
+			
+		debug( 'Assembled prompt: '+prompt );
 		const completionResult = await openai.createCompletion({
 			'prompt': prompt,
 			'max_tokens': 1500,
@@ -160,6 +164,7 @@ async function main(): Promise<void> {
 			'top_p': 1,
 			'model': 'text-davinci-003'
 		});
+		debug( 'Successfully created completion.' );
 		const answer = completionResult.data.choices[ 0 ].text;
 		await createComment({
 			octokit: new Octokit({ auth: GITHUB_TOKEN }),
@@ -168,6 +173,7 @@ async function main(): Promise<void> {
 			issueNumber: context.issue.number,
 			body: answer
 		});
+		debug( 'Successfully created comment.' );
 	} catch ( err ) {
 		error( err );
 		setFailed( err.message );
