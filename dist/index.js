@@ -65,7 +65,7 @@ Answer:`;
 * @returns string with disclaimer appended
 */
 function appendDisclaimer(str) {
-    return str + '\n\n### Disclaimer\n\nThis answer was generated with the help of AI and is not guaranteed to be correct. We will review the answer and update it if necessary.\n\nYou can also ask follow-up questions to clarify the answer or request additional information by leaving a comment on this issue starting with "/ask".';
+    return str + '\n\n### Disclaimer\n\n-   This answer was generated with the help of AI and is not guaranteed to be correct. We will review the answer and update it if necessary.\n-   You can also ask follow-up questions to clarify the answer or request additional information by leaving a comment on this issue starting with `/ask`.';
 }
 /**
 * Creates a comment on an issue.
