@@ -17,21 +17,23 @@
 #/
 
 # Workflow name:
-name: chat_bot_response
+name: issue_bot_response
 
 # Workflow triggers:
 on:
   issue_comment:
     types: [created]
-  discussion:
-    types: [created]
-    categories: [Q&A]
-    
+  issues:
+    types: [opened]
+
 # Workflow jobs:
 jobs:
-  action:
+  respond:
     # Define a display name:
-    name: 'Deprecate packages'
+    name: 'Respond to question'
+    
+    # Define the conditions under which the job should run:
+    if : ${{ startsWith(github.event.comment.body, '/ask ' }}
 
     # Define the type of virtual host machine:
     runs-on: ubuntu-latest
@@ -48,4 +50,4 @@ jobs:
         with:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.CHATBOT_GITHUB_TOKEN }}
-          question: ${{ github.event.comment.body || github.event.discussion.body }}
+          question: ${{ github.event.comment.body }}
