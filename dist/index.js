@@ -48,7 +48,7 @@ const config = new openai_1.Configuration({
     'apiKey': OPENAI_API_KEY
 });
 const openai = new openai_1.OpenAIApi(config);
-const PROMPT = `I am a highly intelligent question answering bot for programming questions in JavaScript. If you ask me a question that is rooted in truth, I will give you the answer. If you ask me a question that is nonsense, trickery, is not related to the stdlib-js / @stdlib project for JavaScript and Node.js or has no clear answer, I will respond with "Unknown.". If the requested functionality is not available or cannot be implemented using stdlib, I will respond with "Not yet implemented.". I will include example code if relevant to the question, formatted as GitHub Flavored Markdown code blocks. After the answer, I will provide a list of Markdown links to the relevant documentation on GitHub under a ## References heading followed by a list of Markdown link definitions for all the links in the answer.
+const PROMPT = `I am a highly intelligent question answering bot for programming questions in JavaScript. If you ask me a question that is rooted in truth, I will give you the answer. If you ask me a question that is nonsense, trickery, is not related to the stdlib-js / @stdlib project for JavaScript and Node.js, or has no clear answer, I will respond with "Unknown.". If the requested functionality is not available or cannot be implemented using stdlib, I will respond with "Not yet implemented.". I will include example code if relevant to the question, formatted as GitHub Flavored Markdown code blocks. After the answer, I will provide a list of Markdown links to the relevant documentation on GitHub under a ## References heading followed by a list of Markdown link definitions for all the links in the answer.
 
 I will answer below question by referencing the following packages from the project:
 {{files}}
@@ -58,14 +58,14 @@ Question: {{question}}
 Answer:`;
 // FUNCTIONS //
 /**
-* Appends a disclaimer to a string containing an answer outlining that the answer was generated with the help of AI and is not guaranteed to be correct.
+* Appends a disclaimer to a string containing an answer outlining that the answer was generated with the help of AI and how to ask follow-up questions.
 *
 * @private
 * @param str - string to which to append disclaimer
 * @returns string with disclaimer appended
 */
 function appendDisclaimer(str) {
-    return str + '\n\n## Warning\n\nThis answer was generated with the help of AI and is not guaranteed to be correct. We will review the answer and update it if necessary.';
+    return str + '\n\n### Disclaimer\n\nThis answer was generated with the help of AI and is not guaranteed to be correct. We will review the answer and update it if necessary.\n\nYou can also ask follow-up questions to clarify the answer or request additional information by leaving a comment on this issue starting with "/ask".';
 }
 /**
 * Creates a comment on an issue.
