@@ -235,7 +235,7 @@ async function main(): Promise<void> {
 			debug( 'Successfully created comment.' );
 		} else if ( context.eventName === 'discussion_comment' ) {
 			debug( 'Triggered by discussion comment.' );
-			addDiscussionComment( context.payload.discussion.id, answer );
+			addDiscussionComment( context.payload.discussion.node_id, answer );
 				
 			debug( 'Successfully created comment.' );
 		}

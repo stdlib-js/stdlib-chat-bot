@@ -198,7 +198,7 @@ async function main() {
         }
         else if (github_1.context.eventName === 'discussion_comment') {
             (0, core_1.debug)('Triggered by discussion comment.');
-            addDiscussionComment(github_1.context.payload.discussion.id, answer);
+            addDiscussionComment(github_1.context.payload.discussion.node_id, answer);
             (0, core_1.debug)('Successfully created comment.');
         }
     }
