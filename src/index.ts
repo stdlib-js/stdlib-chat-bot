@@ -65,7 +65,7 @@ const config = new Configuration({
 });
 const openai = new OpenAIApi( config );
 
-const PROMPT = `I am a highly intelligent question answering bot for programming questions in JavaScript. If you ask me a question that is rooted in truth, I will give you the answer. If you ask me a question that is nonsense, trickery, is not related to the stdlib-js / @stdlib project for JavaScript and Node.js or has no clear answer, I will respond with "Unknown.". If the requested functionality is not available or cannot be implemented using stdlib, I will respond with "Not yet implemented.". I will include example code if relevant to the question, formatted as GitHub Flavored Markdown code blocks. After the answer, I will provide a list of Markdown links to the relevant documentation on GitHub.
+const PROMPT = `I am a highly intelligent question answering bot for programming questions in JavaScript. If you ask me a question that is rooted in truth, I will give you the answer. If you ask me a question that is nonsense, trickery, is not related to the stdlib-js / @stdlib project for JavaScript and Node.js or has no clear answer, I will respond with "Unknown.". If the requested functionality is not available or cannot be implemented using stdlib, I will respond with "Not yet implemented.". I will include example code if relevant to the question, formatted as GitHub Flavored Markdown code blocks. After the answer, I will provide a list of Markdown links to the relevant documentation on GitHub under a ## References heading followed by a list of Markdown link definitions for all the links in the answer.
 
 I will answer below question by referencing the following packages from the project:
 {{files}}
@@ -246,6 +246,27 @@ async function main(): Promise<void> {
 			error( 'Unsupported event name: '+context.eventName );
 		}
 	} catch ( err ) {
+		switch ( context.eventName ) {
+		case 'issue_comment':
+		case 'issues':
+			debug( 'Triggered by issue comment or issue.' );
+			await createComment({
+				owner: context.repo.owner,
+				repo: context.repo.repo,
+				issueNumber: context.issue.number,
+				body: 'Sorry, I could not answer your question.'
+			});
+			debug( 'Successfully created comment.' );
+		break;
+		case 'discussion_comment':
+		case 'discussion':
+			debug( 'Triggered by discussion comment or discussion.' );
+			addDiscussionComment( context.payload.discussion.node_id, 'Sorry, I could not answer your question.' );
+			debug( 'Successfully created comment.' );
+		break;
+		default:
+			error( 'Unsupported event name: '+context.eventName );
+		}
 		error( err );
 		setFailed( err.message );
 	}
