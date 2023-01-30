@@ -9,8 +9,8 @@ inputs:
   GITHUB_TOKEN:
     description: GitHub token for interacting with the GitHub API.
     required: true
-  comment:
-    description: Comment the bot should reply to.
+  question:
+    description: Question the bot should reply to.
     required: true
 
 runs:
