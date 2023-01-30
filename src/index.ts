@@ -131,11 +131,26 @@ async function main(): Promise<void> {
 		
 		const prompt = PROMPT
 			.replace( '{{files}}', top.map( x => {
-				let content = x.embedding.content;
+				let readme = x.embedding.content;
+				
+				// Remove the license header:
+				readme = readme.replace( /\/\*\*\n \* @license[\s\S]*?\n \*\/\n/gm, '' );
+		
+				// Replace Windows line endings with Unix line endings:
+				readme = readme.replace( /\r\n/g, '\n' );
 				
 				// Remove all code blocks:
-				content = content.replace( /```[\s\S]*?```/g, '' );
-				return `Path: ${x.embedding.path}\nText: ${content}`;
+				readme = readme.replace( /```[\s\S]*?```/g, '' );
+				
+				// Remove any HTML comments:
+				readme = readme.replace( /<!--([\s\S]*?)-->/g, '' );
+
+				// Remove any closing </section> tags:
+				readme = readme.replace( /<\/section>/g, '' );
+
+				// Remove any opening <section class=""> tags:
+				readme = readme.replace( /<section class="[^"]+">/g, '' );
+				return `Path: ${x.embedding.path}\nText: ${readme}`;
 			}).join( '\n\n' ) )
 			.replace( '{{question}}', question );
 		const completionResult = await openai.createCompletion({
