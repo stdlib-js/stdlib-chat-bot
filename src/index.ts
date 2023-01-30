@@ -238,7 +238,7 @@ async function main(): Promise<void> {
 			break;
 			case 'discussion_comment': {
 				// Get all comments on the discussion via the GraphQL API:
-				const comments = await getDiscussionComments( context.payload.discussion.id );
+				const comments = await getDiscussionComments( context.payload.discussion.node_id );
 				conversationHistory = comments.map( x => x.body ).join( '\n' );
 			}
 			break;
