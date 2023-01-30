@@ -33,7 +33,7 @@ jobs:
     name: 'Respond to question'
     
     # Define the conditions under which the job should run:
-    if : ( github.event.comment.body && startsWith( github.event.comment.body, '/ask ' ) ) || ( github.event.discussion.body && startsWith( github.event.discussion.body, '/ask ' ) )
+    if : ( github.event.comment.body && startsWith( github.event.comment.body, '/ask ' ) ) || ( github.event.discussion.body && github.event.discussion.category.name == 'Q&A' )
 
     # Define the type of virtual host machine:
     runs-on: ubuntu-latest
