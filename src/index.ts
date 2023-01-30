@@ -43,6 +43,18 @@ type CreateCommentParams = {
 
 // FUNCTIONS //
 
+/**
+* Creates a comment on an issue.
+* 
+* @private
+* @param options - function options
+* @param options.octokit - octokit instance
+* @param options.owner - repository owner
+* @param options.repo - repository name
+* @param options.issueNumber - issue number
+* @param options.body - comment body
+* @returns promise resolving to the response data
+*/
 async function createComment({ octokit, owner, repo, issueNumber, body }: CreateCommentParams): Promise<CreateCommentResponse> {
 	const response = await octokit.issues.createComment({
 		'owner': owner,
