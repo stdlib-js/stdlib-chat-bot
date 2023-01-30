@@ -143,7 +143,6 @@ async function main(): Promise<void> {
 		const top = similarities.filter( x => x.similarity > 0.6 ).slice( 0, 3 );
 		debug( 'Kept top '+top.length+' embeddings as context.' );
 		
-		const removeCodeblocks = false;
 		const prompt = PROMPT
 			.replace( '{{files}}', top.map( x => {
 				let readme = x.embedding.content;
@@ -157,10 +156,8 @@ async function main(): Promise<void> {
 				// Only keep usage sections (surrounded by <section class="usage">...</section>):
 				readme = readme.replace( /([\s\S]*?)<section class="usage">([\s\S]*?)<\/section>([\s\S]*)/g, '$2' );
 				
-				if ( removeCodeblocks ) {
-					// Remove all code blocks:
-					readme = readme.replace( /```[\s\S]*?```/g, '' );
-				}
+				// Remove all code blocks:
+				readme = readme.replace( /```[\s\S]*?```/g, '' );
 					
 				// Remove all link definitions:
 				readme = readme.replace( /\[.*?\]:[\s\S]*?\n/g, '' );
