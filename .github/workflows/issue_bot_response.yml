@@ -21,8 +21,6 @@ name: issue_bot_response
 
 # Workflow triggers:
 on:
-  issue_comment:
-    types: [created]
   issues:
     types: [opened]
 
@@ -33,7 +31,7 @@ jobs:
     name: 'Respond to question'
     
     # Define the conditions under which the job should run:
-    if : startsWith( github.event.comment.body, '/ask ' )
+    if : startsWith( github.event.issue.body, '/ask ' )
 
     # Define the type of virtual host machine:
     runs-on: ubuntu-latest
@@ -50,4 +48,4 @@ jobs:
         with:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.CHATBOT_GITHUB_TOKEN }}
-          question: ${{ github.event.comment.body }}
+          question: ${{ github.event.issue.body }}
