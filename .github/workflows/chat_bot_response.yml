@@ -48,4 +48,4 @@ jobs:
         with:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.CHATBOT_GITHUB_TOKEN }}
-          question: ${{ github.event.comment.body }}
+          question: ${{ github.event.comment.body || github.event.discussion.body }}
