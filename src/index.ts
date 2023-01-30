@@ -224,8 +224,10 @@ async function main(): Promise<void> {
 		});
 		debug( 'Successfully created completion.' );
 		const answer = completionResult.data.choices[ 0 ].text;
-		if ( context.eventName === 'issue_comment' ) {
-			debug( 'Triggered by issue comment.' );
+		switch ( context.eventName ) {
+		case 'issue_comment':
+		case 'issues':
+			debug( 'Triggered by issue comment or issue.' );
 			await createComment({
 				owner: context.repo.owner,
 				repo: context.repo.repo,
@@ -233,11 +235,15 @@ async function main(): Promise<void> {
 				body: answer
 			});
 			debug( 'Successfully created comment.' );
-		} else if ( context.eventName === 'discussion_comment' ) {
-			debug( 'Triggered by discussion comment.' );
+		break;
+		case 'discussion_comment':
+		case 'discussion':
+			debug( 'Triggered by discussion comment or discussion.' );
 			addDiscussionComment( context.payload.discussion.node_id, answer );
-				
 			debug( 'Successfully created comment.' );
+		break;
+		default:
+			error( 'Unsupported event name: '+context.eventName );
 		}
 	} catch ( err ) {
 		error( err );

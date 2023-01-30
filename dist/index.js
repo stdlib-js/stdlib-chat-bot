@@ -186,20 +186,26 @@ async function main() {
         });
         (0, core_1.debug)('Successfully created completion.');
         const answer = completionResult.data.choices[0].text;
-        if (github_1.context.eventName === 'issue_comment') {
-            (0, core_1.debug)('Triggered by issue comment.');
-            await createComment({
-                owner: github_1.context.repo.owner,
-                repo: github_1.context.repo.repo,
-                issueNumber: github_1.context.issue.number,
-                body: answer
-            });
-            (0, core_1.debug)('Successfully created comment.');
-        }
-        else if (github_1.context.eventName === 'discussion_comment') {
-            (0, core_1.debug)('Triggered by discussion comment.');
-            addDiscussionComment(github_1.context.payload.discussion.node_id, answer);
-            (0, core_1.debug)('Successfully created comment.');
+        switch (github_1.context.eventName) {
+            case 'issue_comment':
+            case 'issues':
+                (0, core_1.debug)('Triggered by issue comment or issue.');
+                await createComment({
+                    owner: github_1.context.repo.owner,
+                    repo: github_1.context.repo.repo,
+                    issueNumber: github_1.context.issue.number,
+                    body: answer
+                });
+                (0, core_1.debug)('Successfully created comment.');
+                break;
+            case 'discussion_comment':
+            case 'discussion':
+                (0, core_1.debug)('Triggered by discussion comment or discussion.');
+                addDiscussionComment(github_1.context.payload.discussion.node_id, answer);
+                (0, core_1.debug)('Successfully created comment.');
+                break;
+            default:
+                (0, core_1.error)('Unsupported event name: ' + github_1.context.eventName);
         }
     }
     catch (err) {
