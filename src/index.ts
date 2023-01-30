@@ -21,8 +21,9 @@
 // MODULES //
 
 import { OpenAIApi , Configuration } from 'openai';
-import { error, debug, getInput, setFailed } from '@actions/core';
+import { error, debug, info, getInput, setFailed } from '@actions/core';
 import { context } from '@actions/github';
+import { graphql } from '@octokit/graphql';
 import { Octokit } from '@octokit/rest';
 import type { RestEndpointMethodTypes } from '@octokit/plugin-rest-endpoint-methods';
 import { readFile } from 'fs/promises';
@@ -33,12 +34,44 @@ import { join } from 'path';
 
 type CreateCommentResponse = Promise<RestEndpointMethodTypes["issues"]["createComment"]["response"]["data"]>	;
 type CreateCommentParams = {
-	octokit: Octokit;
 	owner: string;
 	repo: string;
 	issueNumber: number;
 	body: string;
 };
+
+
+// VARIABLES //
+
+const OPENAI_API_KEY = getInput( 'OPENAI_API_KEY', { 
+	required: true 
+});
+const GITHUB_TOKEN = getInput( 'GITHUB_TOKEN', { 
+	required: true 
+});
+const question = getInput( 'question', {
+	required: true
+});
+const graphqlWithAuth = graphql.defaults({
+	headers: {
+		authorization: `token ${GITHUB_TOKEN}`
+	},
+});
+const octokit = new Octokit({ 
+	auth: GITHUB_TOKEN
+});
+const config = new Configuration({
+	'apiKey': OPENAI_API_KEY
+});
+const openai = new OpenAIApi( config );
+
+const PROMPT = `I am a highly intelligent question answering bot for programming questions in JavaScript. If you ask me a question that is rooted in truth, I will give you the answer. If you ask me a question that is nonsense, trickery, is not related to the stdlib-js / @stdlib project for JavaScript and Node.js or has no clear answer, I will respond with "Unknown.". If the requested functionality is not available or cannot be implemented using stdlib, I will respond with "Not yet implemented.". I will include example code if relevant to the question, formatted as GitHub Flavored Markdown code blocks.
+
+I will answer below question by referencing the following packages from the project:
+{{files}}
+
+Question: {{question}}
+Answer:`;
 
 
 // FUNCTIONS //
@@ -48,14 +81,13 @@ type CreateCommentParams = {
 * 
 * @private
 * @param options - function options
-* @param options.octokit - octokit instance
 * @param options.owner - repository owner
 * @param options.repo - repository name
 * @param options.issueNumber - issue number
 * @param options.body - comment body
 * @returns promise resolving to the response data
 */
-async function createComment({ octokit, owner, repo, issueNumber, body }: CreateCommentParams): Promise<CreateCommentResponse> {
+async function createComment({ owner, repo, issueNumber, body }: CreateCommentParams): Promise<CreateCommentResponse> {
 	const response = await octokit.issues.createComment({
 		'owner': owner,
 		'repo': repo,
@@ -63,6 +95,35 @@ async function createComment({ octokit, owner, repo, issueNumber, body }: Create
 		'body': body
 	});
 	return response.data;
+}
+
+/**
+* Adds a comment to a discussion.
+* 
+* @private
+* @param discussionId - discussion id
+* @param body - comment body
+* @returns promise resolving to the comment
+*/
+async function addDiscussionComment( discussionId, body ) {
+	const query = `
+		mutation ($discussionId: ID!, $body: String!) {
+		addDiscussionComment(input:{discussionId: $discussionId, body: $body}) {
+			discussionComment {
+			id
+			body
+			}
+		}
+		}
+	`;
+	const variables = {
+		discussionId,
+		body
+	};
+	const result = await graphqlWithAuth( query, variables );
+	info( 'Successfully added comment to discussion.' );
+	info( JSON.stringify( result ) );
+	return result;
 }
 
 /**
@@ -84,31 +145,6 @@ function vectorSimilarity( x: Array<number>, y: Array<number> ): number {
 	}
 	return sum;
 }
-
-
-// VARIABLES //
-
-const OPENAI_API_KEY = getInput( 'OPENAI_API_KEY', { 
-	required: true 
-});
-const GITHUB_TOKEN = getInput( 'GITHUB_TOKEN', { 
-	required: true 
-});
-const question = getInput( 'question', {
-	required: true
-});
-const config = new Configuration({
-	'apiKey': OPENAI_API_KEY
-});
-const openai = new OpenAIApi( config );
-
-const PROMPT = `I am a highly intelligent question answering bot for programming questions in JavaScript. If you ask me a question that is rooted in truth, I will give you the answer. If you ask me a question that is nonsense, trickery, is not related to the stdlib-js / @stdlib project for JavaScript and Node.js or has no clear answer, I will respond with "Unknown.". If the requested functionality is not available or cannot be implemented using stdlib, I will respond with "Not yet implemented.". I will include example code if relevant to the question, formatted as GitHub Flavored Markdown code blocks.
-
-I will answer below question by referencing the following packages from the project:
-{{files}}
-
-Question: {{question}}
-Answer:`;
 
 
 // MAIN //
@@ -188,14 +224,21 @@ async function main(): Promise<void> {
 		});
 		debug( 'Successfully created completion.' );
 		const answer = completionResult.data.choices[ 0 ].text;
-		await createComment({
-			octokit: new Octokit({ auth: GITHUB_TOKEN }),
-			owner: context.repo.owner,
-			repo: context.repo.repo,
-			issueNumber: context.issue.number,
-			body: answer
-		});
-		debug( 'Successfully created comment.' );
+		if ( context.eventName === 'issue_comment' ) {
+			debug( 'Triggered by issue comment.' );
+			await createComment({
+				owner: context.repo.owner,
+				repo: context.repo.repo,
+				issueNumber: context.issue.number,
+				body: answer
+			});
+			debug( 'Successfully created comment.' );
+		} else if ( context.eventName === 'discussion_comment' ) {
+			debug( 'Triggered by discussion comment.' );
+			addDiscussionComment( context.payload.discussion.id, answer );
+				
+			debug( 'Successfully created comment.' );
+		}
 	} catch ( err ) {
 		error( err );
 		setFailed( err.message );
