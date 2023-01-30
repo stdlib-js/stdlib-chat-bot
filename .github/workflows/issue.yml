@@ -1,0 +1,16 @@
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  action:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issue_comment'
+    steps:
+      - name: Checkout code
+        uses: nschloe/action-cached-lfs-checkout@v1
+      - name: Run bot
+        uses: ./
+        with:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          comment: ${{ github.event.comment.body }}
