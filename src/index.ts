@@ -37,9 +37,30 @@ const GITHUB_TOKEN = getInput( 'GITHUB_TOKEN', {
 	required: true
 });
 setupGitHub( GITHUB_TOKEN );
-const question = getInput( 'question', {
-	required: true
-});
+
+
+// FUNCTIONS //
+
+/**
+* Extracts the question from the event payload.
+*
+* @private
+* @returns question
+*/
+function extractQuestion(): string {
+	switch ( context.eventName ) {
+	case 'discussion_comment':
+	case 'issue_comment':
+		debug( 'Triggered by discussion comment or issue comment.' );
+		return context.payload.comment.body;
+	case 'discussion':
+		debug( 'Triggered by discussion.' );
+		return context.payload.discussion.body;
+	case 'issues':
+		debug( 'Triggered by issue.' );
+		return context.payload.issue.body;
+	}
+}
 
 
 // MAIN //
@@ -50,6 +71,7 @@ const question = getInput( 'question', {
 * @returns promise indicating completion
 */
 async function main(): Promise<void> {
+	const question = extractQuestion();
 	const embeddingsJSON = await readFile( join( __dirname, '..', 'embeddings.json' ), 'utf8' );
 	const embeddings  = JSON.parse( embeddingsJSON );
 	try {
@@ -58,16 +80,15 @@ async function main(): Promise<void> {
 
 		// Assemble history of the conversation (i.e., previous comments) if the event is a comment event:
 		let conversationHistory;
+		let comments;
 		switch ( context.eventName ) {
-			case 'issue_comment': {
-				const comments = await getIssueComments();
-				conversationHistory = generateHistory( comments );
-			}
+		case 'issue_comment':
+			comments = await getIssueComments();
+			conversationHistory = generateHistory( comments );
 			break;
-			case 'discussion_comment': {
-				const comments = await getDiscussionComments( context.payload.discussion.node_id );
-				conversationHistory = generateHistory( comments );
-			}
+		case 'discussion_comment':
+			comments = await getDiscussionComments( context.payload.discussion.node_id );
+			conversationHistory = generateHistory( comments );
 			break;
 		}
 		info( 'Conversation history: '+conversationHistory );
@@ -89,13 +110,13 @@ async function main(): Promise<void> {
 				body: answer
 			});
 			debug( 'Successfully created comment.' );
-		break;
+			break;
 		case 'discussion_comment':
 		case 'discussion':
 			debug( 'Triggered by discussion comment or discussion.' );
 			addDiscussionComment( context.payload.discussion.node_id, answer );
 			debug( 'Successfully created comment.' );
-		break;
+			break;
 		default:
 			error( 'Unsupported event name: '+context.eventName );
 		}
@@ -111,13 +132,13 @@ async function main(): Promise<void> {
 				body: 'Sorry, I was not able to answer your question.'
 			});
 			debug( 'Successfully created comment.' );
-		break;
+			break;
 		case 'discussion_comment':
 		case 'discussion':
 			debug( 'Triggered by discussion comment or discussion.' );
 			addDiscussionComment( context.payload.discussion.node_id, 'Sorry, I was not able to answer your question.' );
 			debug( 'Successfully created comment.' );
-		break;
+			break;
 		default:
 			error( 'Unsupported event name: '+context.eventName );
 		}

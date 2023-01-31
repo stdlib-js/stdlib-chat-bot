@@ -29,23 +29,22 @@ jobs:
   respond:
     # Define a display name:
     name: 'Respond to question'
-    
+
     # Define the conditions under which the job should run:
     if : github.event.discussion.category.name == 'Q&A'
 
     # Define the type of virtual host machine:
     runs-on: ubuntu-latest
-    
+
     # Define the sequence of job steps:
     steps:
       # Checkout the repository with LFS caching:
       - name: 'Checkout repository'
         uses: nschloe/action-cached-lfs-checkout@v1
-        
+
       # Run the action:
       - name: 'Run action'
         uses: ./
         with:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.CHATBOT_GITHUB_TOKEN }}
-          question: ${{ github.event.discussion.body }}

@@ -34,9 +34,27 @@ const GITHUB_TOKEN = (0, core_1.getInput)('GITHUB_TOKEN', {
     required: true
 });
 (0, github_2.setupGitHub)(GITHUB_TOKEN);
-const question = (0, core_1.getInput)('question', {
-    required: true
-});
+// FUNCTIONS //
+/**
+* Extracts the question from the event payload.
+*
+* @private
+* @returns question
+*/
+function extractQuestion() {
+    switch (github_1.context.eventName) {
+        case 'discussion_comment':
+        case 'issue_comment':
+            (0, core_1.debug)('Triggered by discussion comment or issue comment.');
+            return github_1.context.payload.comment.body;
+        case 'discussion':
+            (0, core_1.debug)('Triggered by discussion.');
+            return github_1.context.payload.discussion.body;
+        case 'issues':
+            (0, core_1.debug)('Triggered by issue.');
+            return github_1.context.payload.issue.body;
+    }
+}
 // MAIN //
 /**
 * Main function.
@@ -44,6 +62,7 @@ const question = (0, core_1.getInput)('question', {
 * @returns promise indicating completion
 */
 async function main() {
+    const question = extractQuestion();
     const embeddingsJSON = await (0, promises_1.readFile)((0, path_1.join)(__dirname, '..', 'embeddings.json'), 'utf8');
     const embeddings = JSON.parse(embeddingsJSON);
     try {
@@ -51,18 +70,15 @@ async function main() {
         const mostSimilar = await (0, openai_1.findMostSimilar)(embedding, embeddings);
         // Assemble history of the conversation (i.e., previous comments) if the event is a comment event:
         let conversationHistory;
+        let comments;
         switch (github_1.context.eventName) {
             case 'issue_comment':
-                {
-                    const comments = await (0, github_2.getIssueComments)();
-                    conversationHistory = (0, github_2.generateHistory)(comments);
-                }
+                comments = await (0, github_2.getIssueComments)();
+                conversationHistory = (0, github_2.generateHistory)(comments);
                 break;
             case 'discussion_comment':
-                {
-                    const comments = await (0, github_2.getDiscussionComments)(github_1.context.payload.discussion.node_id);
-                    conversationHistory = (0, github_2.generateHistory)(comments);
-                }
+                comments = await (0, github_2.getDiscussionComments)(github_1.context.payload.discussion.node_id);
+                conversationHistory = (0, github_2.generateHistory)(comments);
                 break;
         }
         (0, core_1.info)('Conversation history: ' + conversationHistory);

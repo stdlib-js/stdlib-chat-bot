@@ -9,9 +9,6 @@ inputs:
   GITHUB_TOKEN:
     description: GitHub token for interacting with the GitHub API.
     required: true
-  question:
-    description: Question the bot should reply to.
-    required: true
 
 runs:
   using: node16
