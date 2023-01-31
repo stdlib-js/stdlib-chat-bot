@@ -1,4 +1,8 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
-npm run lint
+# Check whether some of the staged files are residing in the `src` folder, and if so, run the `build` and `lint` scripts
+if git diff --cached --name-only | grep -qE '^src/'; then
+  npm run build && npm run lint
+  git add dist/*
+fi
