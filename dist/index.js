@@ -113,6 +113,12 @@ async function createComment({ owner, repo, issueNumber, body }) {
     });
     return response.data;
 }
+/**
+* Returns a list of comments on an issue.
+*
+* @private
+* @returns promise resolving to a list of comments
+*/
 async function getIssueComments() {
     const response = await octokit.issues.listComments({
         'owner': github_1.context.repo.owner,
@@ -152,8 +158,6 @@ async function addDiscussionComment(discussionId, body) {
         body
     };
     const result = await graphqlWithAuth(query, variables);
-    (0, core_1.info)('Successfully added comment to discussion.');
-    (0, core_1.info)(JSON.stringify(result));
     return result;
 }
 /**
@@ -184,9 +188,47 @@ async function getDiscussionComments(discussionId) {
         discussionId
     };
     const result = await graphqlWithAuth(query, variables);
-    (0, core_1.info)('Successfully retrieved comments from discussion.');
-    (0, core_1.info)(JSON.stringify(result));
     return result.node.comments.nodes;
+}
+/**
+* Generates an embedding for a given question.
+*
+* @private
+* @param question - question
+* @returns promise resolving to the embedding vector
+*/
+async function createEmbedding(question) {
+    const result = await openai.createEmbedding({
+        'input': question,
+        'model': 'text-embedding-ada-002'
+    });
+    return result.data.data[0].embedding;
+}
+/**
+* Finds the most N similar embeddings to a given embedding provided the similarity is greater than a given threshold.
+*
+* @private
+* @param embedding - embedding
+* @param allEmbeddings - all embeddings
+* @param topN - number of most similar embeddings to return
+* @param threshold - similarity threshold
+* @returns most similar embeddings
+*/
+async function findMostSimilar(embedding, allEmbeddings, topN = 3, threshold = 0.6) {
+    const similarities = new Array(allEmbeddings.length);
+    for (let i = 0; i < allEmbeddings.length; i++) {
+        const similarity = vectorSimilarity(embedding, allEmbeddings[i].embedding);
+        similarities[i] = {
+            'embedding': allEmbeddings[i],
+            'similarity': similarity
+        };
+    }
+    // Sort similarities in descending order:
+    similarities.sort((a, b) => b.similarity - a.similarity);
+    // Only keep the top N embeddings that have a similarity greater than the threshold:
+    return similarities
+        .filter(x => x.similarity > threshold)
+        .slice(0, topN);
 }
 /**
 * Computes the cosine similarity between two embedding vectors.
@@ -217,25 +259,8 @@ async function main() {
     const embeddingsJSON = await (0, promises_1.readFile)((0, path_1.join)(__dirname, '..', 'embeddings.json'), 'utf8');
     const embeddings = JSON.parse(embeddingsJSON);
     try {
-        const result = await openai.createEmbedding({
-            'input': question,
-            'model': 'text-embedding-ada-002'
-        });
-        (0, core_1.debug)('Successfully created embedding.');
-        const embedding = result.data.data[0].embedding;
-        const similarities = [];
-        for (let i = 0; i < embeddings.length; i++) {
-            const similarity = vectorSimilarity(embedding, embeddings[i].embedding);
-            similarities.push({
-                'embedding': embeddings[i],
-                'similarity': similarity
-            });
-        }
-        // Sort similarities in descending order:
-        similarities.sort((a, b) => b.similarity - a.similarity);
-        // Only keep the top three embeddings that have a similarity greater than 0.6:
-        const top = similarities.filter(x => x.similarity > 0.6).slice(0, 3);
-        (0, core_1.debug)('Kept top ' + top.length + ' embeddings as context.');
+        const embedding = await createEmbedding(question);
+        const mostSimilar = await findMostSimilar(embedding, embeddings);
         let conversationHistory;
         switch (github_1.context.eventName) {
             case 'issue_comment':
@@ -253,7 +278,7 @@ async function main() {
         }
         (0, core_1.info)('Conversation history: ' + conversationHistory);
         const prompt = PROMPT
-            .replace('{{files}}', top.map(x => {
+            .replace('{{files}}', mostSimilar.map(x => {
             let readme = x.embedding.content;
             // Remove the license header:
             readme = readme.replace(/\/\*\*\n \* @license[\s\S]*?\n \*\/\n/gm, '');

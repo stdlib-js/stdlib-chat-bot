@@ -143,6 +143,12 @@ async function createComment({ owner, repo, issueNumber, body }: CreateCommentPa
 	return response.data;
 }
 
+/**
+* Returns a list of comments on an issue.
+* 
+* @private
+* @returns promise resolving to a list of comments
+*/
 async function getIssueComments(): Promise<Array<Comment>> {
 	const response = await octokit.issues.listComments({
 		'owner': context.repo.owner,
@@ -167,7 +173,7 @@ async function getIssueComments(): Promise<Array<Comment>> {
 * @param body - comment body
 * @returns promise resolving to the comment
 */
-async function addDiscussionComment( discussionId, body ) {
+async function addDiscussionComment( discussionId: string, body: string ): Promise<GraphQlQueryResponseData> {
 	const query = `
 		mutation ($discussionId: ID!, $body: String!) {
 		addDiscussionComment(input:{discussionId: $discussionId, body: $body}) {
@@ -183,8 +189,6 @@ async function addDiscussionComment( discussionId, body ) {
 		body
 	};
 	const result = await graphqlWithAuth( query, variables );
-	info( 'Successfully added comment to discussion.' );
-	info( JSON.stringify( result ) );
 	return result;
 }
 
@@ -195,7 +199,7 @@ async function addDiscussionComment( discussionId, body ) {
 * @param discussionId - discussion id
 * @returns promise resolving to the comments
 */
-async function getDiscussionComments( discussionId ) {
+async function getDiscussionComments( discussionId: string ): Promise<Array<Comment>> {
 	const query = `
 		query ($discussionId: ID!) {
 		node(id: $discussionId) {
@@ -216,9 +220,59 @@ async function getDiscussionComments( discussionId ) {
 		discussionId
 	};
 	const result: GraphQlQueryResponseData = await graphqlWithAuth( query, variables );
-	info( 'Successfully retrieved comments from discussion.' );
-	info( JSON.stringify( result ) );
 	return result.node.comments.nodes;
+}
+
+/**
+* Generates an embedding for a given question.
+*
+* @private
+* @param question - question
+* @returns promise resolving to the embedding vector
+*/
+async function createEmbedding( question: string ): Promise<number[]> {
+	const result = await openai.createEmbedding({
+		'input': question,
+		'model': 'text-embedding-ada-002'
+	});
+	return result.data.data[ 0 ].embedding;
+}
+
+/**
+* Finds the most N similar embeddings to a given embedding provided the similarity is greater than a given threshold.
+* 
+* @private
+* @param embedding - embedding
+* @param allEmbeddings - all embeddings
+* @param topN - number of most similar embeddings to return
+* @param threshold - similarity threshold
+* @returns most similar embeddings
+*/
+async function findMostSimilar( 
+	embedding: number[],
+	allEmbeddings: Array<{
+		package: string;
+		content: string;
+		embedding: number[];
+	}>,
+	topN = 3,
+	threshold = 0.6
+) {
+	const similarities = new Array( allEmbeddings.length );
+	for ( let i = 0; i < allEmbeddings.length; i++ ) {
+		const similarity = vectorSimilarity( embedding, allEmbeddings[ i ].embedding );
+		similarities[ i ] = {
+			'embedding': allEmbeddings[ i ],
+			'similarity': similarity
+		};
+	}
+	// Sort similarities in descending order:
+	similarities.sort( ( a, b ) => b.similarity - a.similarity );
+		
+	// Only keep the top N embeddings that have a similarity greater than the threshold:
+	return similarities
+		.filter( x => x.similarity > threshold )
+		.slice( 0, topN );
 }
 
 /**
@@ -233,7 +287,7 @@ async function getDiscussionComments( discussionId ) {
 * @param y - second vector
 * @returns dot product
 */
-function vectorSimilarity( x: Array<number>, y: Array<number> ): number {
+function vectorSimilarity( x: number[], y: number[] ): number {
 	let sum = 0;
 	for ( let i = 0; i < x.length; i++ ) {
 		sum += x[ i ] * y[ i ];
@@ -251,28 +305,10 @@ function vectorSimilarity( x: Array<number>, y: Array<number> ): number {
 */ 
 async function main(): Promise<void> {
 	const embeddingsJSON = await readFile( join( __dirname, '..', 'embeddings.json' ), 'utf8' );
-	const embeddings = JSON.parse( embeddingsJSON );
+	const embeddings  = JSON.parse( embeddingsJSON );
 	try {
-		const result = await openai.createEmbedding({
-			'input': question,
-			'model': 'text-embedding-ada-002'
-		});
-		debug( 'Successfully created embedding.' );
-		const embedding = result.data.data[ 0 ].embedding;
-		const similarities = [];
-		for ( let i = 0; i < embeddings.length; i++ ) {
-			const similarity = vectorSimilarity( embedding, embeddings[ i ].embedding );
-			similarities.push({
-				'embedding': embeddings[ i ],
-				'similarity': similarity
-			});
-		}
-		// Sort similarities in descending order:
-		similarities.sort( ( a, b ) => b.similarity - a.similarity );
-		
-		// Only keep the top three embeddings that have a similarity greater than 0.6:
-		const top = similarities.filter( x => x.similarity > 0.6 ).slice( 0, 3 );
-		debug( 'Kept top '+top.length+' embeddings as context.' );
+		const embedding = await createEmbedding( question );
+		const mostSimilar = await findMostSimilar( embedding, embeddings );
 		
 		let conversationHistory;
 		switch ( context.eventName ) {
@@ -289,7 +325,7 @@ async function main(): Promise<void> {
 		}
 		info( 'Conversation history: '+conversationHistory );
 		const prompt = PROMPT
-			.replace( '{{files}}', top.map( x => {
+			.replace( '{{files}}', mostSimilar.map( x => {
 				let readme = x.embedding.content;
 				
 				// Remove the license header:
