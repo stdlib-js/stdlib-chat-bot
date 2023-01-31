@@ -46,41 +46,43 @@ function setupOpenAI(apiKey) {
 }
 exports.setupOpenAI = setupOpenAI;
 /**
-* Compresses the content of a README file for use in a prompt.
+* Compresses text content for use in a prompt.
 *
 * @private
-* @param x - embedding
+* @param text - text content
+* @param removeCodeBlocks - boolean indicating whether to remove code blocks
 * @returns compressed content
 */
-function compressReadmeContent(x) {
-    let readme = x.content;
+function compressContent(text, removeCodeBlocks = true) {
     // Remove the license header:
-    readme = readme.replace(/\/\*\*\n \* @license[\s\S]*?\n \*\/\n/gm, '');
+    text = text.replace(/\/\*\*\n \* @license[\s\S]*?\n \*\/\n/gm, '');
     // Replace Windows line endings with Unix line endings:
-    readme = readme.replace(/\r\n/g, '\n');
+    text = text.replace(/\r\n/g, '\n');
     // Only keep usage sections (surrounded by <section class="usage">...</section>):
-    readme = readme.replace(/([\s\S]*?)<section class="usage">([\s\S]*?)<\/section>([\s\S]*)/g, '$2');
-    // Remove all code blocks:
-    readme = readme.replace(/```[\s\S]*?```/g, '');
+    text = text.replace(/([\s\S]*?)<section class="usage">([\s\S]*?)<\/section>([\s\S]*)/g, '$2');
+    // Remove all code blocks if requested:
+    if (removeCodeBlocks) {
+        text = text.replace(/```[\s\S]*?```/g, '');
+    }
     // Remove all link definitions:
-    readme = readme.replace(/\[.*?\]:[\s\S]*?\n/g, '');
+    text = text.replace(/\[.*?\]:[\s\S]*?\n/g, '');
     // Remove any HTML comments:
-    readme = readme.replace(/<!--([\s\S]*?)-->/g, '');
+    text = text.replace(/<!--([\s\S]*?)-->/g, '');
     // Remove any closing </section> tags:
-    readme = readme.replace(/<\/section>/g, '');
+    text = text.replace(/<\/section>/g, '');
     // Remove any opening <section class=""> tags:
-    readme = readme.replace(/<section class="[^"]+">/g, '');
+    text = text.replace(/<section class="[^"]+">/g, '');
     // Replace multiple newlines with a single newline:
-    readme = readme.replace(/\n{3,}/g, '\n\n');
+    text = text.replace(/\n{3,}/g, '\n\n');
     // Remove any leading or trailing newlines:
-    readme = readme.replace(/^\n+|\n+$/g, '');
+    text = text.replace(/^\n+|\n+$/g, '');
     // Replace all newlines with a space:
-    readme = readme.replace(/\n/g, ' ');
+    text = text.replace(/\n/g, ' ');
     // Replace all multiple spaces with a single space:
-    readme = readme.replace(/ {2,}/g, ' ');
+    text = text.replace(/ {2,}/g, ' ');
     // Replace all multiple tabs with a single tab:
-    readme = readme.replace(/\t{2,}/g, '\t');
-    return `Package: ${x.package}\nText: ${readme}`;
+    text = text.replace(/\t{2,}/g, '\t');
+    return text;
 }
 /**
 * Assembles a prompt for the OpenAI API.
@@ -92,8 +94,11 @@ function compressReadmeContent(x) {
 * @returns assembled prompt
 */
 function assemblePrompt(question, mostSimilar, history) {
+    history = compressContent(history, false);
     return PROMPT_TEMPLATE
-        .replace('{{files}}', mostSimilar.map(compressReadmeContent).join('\n\n'))
+        .replace('{{files}}', mostSimilar.map(x => {
+        return `Package: ${x.package}\nText: ${compressContent(x.content)}`;
+    }).join('\n\n'))
         .replace('{{history}}', history ? `History:\n${history}\n` : '')
         .replace('{{question}}', question);
 }
