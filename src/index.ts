@@ -32,7 +32,7 @@ import { join } from 'path';
 
 // TYPES //
 
-type CreateCommentResponse = Promise<RestEndpointMethodTypes["issues"]["createComment"]["response"]["data"]>;
+type CreateCommentResponse = Promise<RestEndpointMethodTypes['issues']['createComment']['response']['data']>;
 type CreateCommentParams = {
 	owner: string;
 	repo: string;
@@ -49,11 +49,11 @@ type Comment = {
 
 // VARIABLES //
 
-const OPENAI_API_KEY = getInput( 'OPENAI_API_KEY', { 
-	required: true 
+const OPENAI_API_KEY = getInput( 'OPENAI_API_KEY', {
+	required: true
 });
-const GITHUB_TOKEN = getInput( 'GITHUB_TOKEN', { 
-	required: true 
+const GITHUB_TOKEN = getInput( 'GITHUB_TOKEN', {
+	required: true
 });
 const question = getInput( 'question', {
 	required: true
@@ -63,7 +63,7 @@ const graphqlWithAuth = graphql.defaults({
 		authorization: `token ${GITHUB_TOKEN}`
 	},
 });
-const octokit = new Octokit({ 
+const octokit = new Octokit({
 	auth: GITHUB_TOKEN
 });
 const config = new Configuration({
@@ -107,7 +107,7 @@ function stripDisclaimer( str: string ): string {
 
 /**
 * Generates a history string for the prompt based on previous comments in a discussion or issue.
-* 
+*
 * @private
 * @param comments - comments
 * @returns history string
@@ -124,7 +124,7 @@ function generateHistory( comments: Array<Comment> ): string {
 
 /**
 * Creates a comment on an issue.
-* 
+*
 * @private
 * @param options - function options
 * @param options.owner - repository owner
@@ -145,7 +145,7 @@ async function createComment({ owner, repo, issueNumber, body }: CreateCommentPa
 
 /**
 * Returns a list of comments on an issue.
-* 
+*
 * @private
 * @returns promise resolving to a list of comments
 */
@@ -167,7 +167,7 @@ async function getIssueComments(): Promise<Array<Comment>> {
 
 /**
 * Adds a comment to a discussion.
-* 
+*
 * @private
 * @param discussionId - discussion id
 * @param body - comment body
@@ -240,15 +240,15 @@ async function createEmbedding( question: string ): Promise<number[]> {
 
 /**
 * Finds the most N similar embeddings to a given embedding provided the similarity is greater than a given threshold.
-* 
+*
 * @private
-* @param embedding - embedding
+* @param embedding - question embedding
 * @param allEmbeddings - all embeddings
 * @param topN - number of most similar embeddings to return
 * @param threshold - similarity threshold
 * @returns most similar embeddings
 */
-async function findMostSimilar( 
+async function findMostSimilar(
 	embedding: number[],
 	allEmbeddings: Array<{
 		package: string;
@@ -257,7 +257,14 @@ async function findMostSimilar(
 	}>,
 	topN = 3,
 	threshold = 0.6
-) {
+): Promise<Array<{
+	embedding: {
+		package: string;
+		content: string;
+		embedding: number[];
+	};
+	similarity: number;
+}>> {
 	const similarities = new Array( allEmbeddings.length );
 	for ( let i = 0; i < allEmbeddings.length; i++ ) {
 		const similarity = vectorSimilarity( embedding, allEmbeddings[ i ].embedding );
@@ -268,7 +275,7 @@ async function findMostSimilar(
 	}
 	// Sort similarities in descending order:
 	similarities.sort( ( a, b ) => b.similarity - a.similarity );
-		
+
 	// Only keep the top N embeddings that have a similarity greater than the threshold:
 	return similarities
 		.filter( x => x.similarity > threshold )
@@ -281,7 +288,7 @@ async function findMostSimilar(
 * ## Notes
 *
 * -   Since OpenAI embeddings are normalized, the dot product is equivalent to the cosine similarity.
-* 
+*
 * @private
 * @param x - first vector
 * @param y - second vector
@@ -295,6 +302,26 @@ function vectorSimilarity( x: number[], y: number[] ): number {
 	return sum;
 }
 
+/**
+* Generates an answer to a given prompt.
+*
+* @private
+* @param prompt - prompt
+* @returns promise resolving to the answer
+*/
+async function generateAnswer( prompt: string ): Promise<string> {
+	const completionResult = await openai.createCompletion({
+		'prompt': prompt,
+		'max_tokens': 1500,
+		'temperature': 0.5,
+		'top_p': 1,
+		'model': 'text-davinci-003'
+	});
+	let out = completionResult.data.choices[ 0 ].text;
+	out = appendDisclaimer( out );
+	return out;
+}
+
 
 // MAIN //
 
@@ -302,14 +329,15 @@ function vectorSimilarity( x: number[], y: number[] ): number {
 * Main function.
 *
 * @returns promise indicating completion
-*/ 
+*/
 async function main(): Promise<void> {
 	const embeddingsJSON = await readFile( join( __dirname, '..', 'embeddings.json' ), 'utf8' );
 	const embeddings  = JSON.parse( embeddingsJSON );
 	try {
 		const embedding = await createEmbedding( question );
 		const mostSimilar = await findMostSimilar( embedding, embeddings );
-		
+
+		// Assemble history of the conversation (i.e., previous comments) if the event is a comment event:
 		let conversationHistory;
 		switch ( context.eventName ) {
 			case 'issue_comment': {
@@ -324,25 +352,27 @@ async function main(): Promise<void> {
 			break;
 		}
 		info( 'Conversation history: '+conversationHistory );
+
+		// Assemble prompt for OpenAI GPT-3 by concatenating the conversation history and the most relevant README.md sections:
 		const prompt = PROMPT
 			.replace( '{{files}}', mostSimilar.map( x => {
 				let readme = x.embedding.content;
-				
+
 				// Remove the license header:
 				readme = readme.replace( /\/\*\*\n \* @license[\s\S]*?\n \*\/\n/gm, '' );
-		
+
 				// Replace Windows line endings with Unix line endings:
 				readme = readme.replace( /\r\n/g, '\n' );
-				
+
 				// Only keep usage sections (surrounded by <section class="usage">...</section>):
 				readme = readme.replace( /([\s\S]*?)<section class="usage">([\s\S]*?)<\/section>([\s\S]*)/g, '$2' );
-				
+
 				// Remove all code blocks:
 				readme = readme.replace( /```[\s\S]*?```/g, '' );
-					
+
 				// Remove all link definitions:
 				readme = readme.replace( /\[.*?\]:[\s\S]*?\n/g, '' );
-				
+
 				// Remove any HTML comments:
 				readme = readme.replace( /<!--([\s\S]*?)-->/g, '' );
 
@@ -351,25 +381,18 @@ async function main(): Promise<void> {
 
 				// Remove any opening <section class=""> tags:
 				readme = readme.replace( /<section class="[^"]+">/g, '' );
-				
+
 				// Replace multiple newlines with a single newline:
 				readme = readme.replace( /\n{3,}/g, '\n\n' );
-				
+
 				return `Package: ${x.embedding.package}\nText: ${readme}`;
 			}).join( '\n\n' ) )
 			.replace( '{{history}}', conversationHistory ? `History:\n${conversationHistory}\n` : '' )
 			.replace( '{{question}}', question );
-			
+
 		debug( 'Assembled prompt: '+prompt );
-		const completionResult = await openai.createCompletion({
-			'prompt': prompt,
-			'max_tokens': 1500,
-			'temperature': 0.5,
-			'top_p': 1,
-			'model': 'text-davinci-003'
-		});
-		debug( 'Successfully created completion.' );
-		const answer = appendDisclaimer( completionResult.data.choices[ 0 ].text );
+		const answer = await generateAnswer( prompt );
+
 		switch ( context.eventName ) {
 		case 'issue_comment':
 		case 'issues':

@@ -208,7 +208,7 @@ async function createEmbedding(question) {
 * Finds the most N similar embeddings to a given embedding provided the similarity is greater than a given threshold.
 *
 * @private
-* @param embedding - embedding
+* @param embedding - question embedding
 * @param allEmbeddings - all embeddings
 * @param topN - number of most similar embeddings to return
 * @param threshold - similarity threshold
@@ -249,6 +249,25 @@ function vectorSimilarity(x, y) {
     }
     return sum;
 }
+/**
+* Generates an answer to a given prompt.
+*
+* @private
+* @param prompt - prompt
+* @returns promise resolving to the answer
+*/
+async function generateAnswer(prompt) {
+    const completionResult = await openai.createCompletion({
+        'prompt': prompt,
+        'max_tokens': 1500,
+        'temperature': 0.5,
+        'top_p': 1,
+        'model': 'text-davinci-003'
+    });
+    let out = completionResult.data.choices[0].text;
+    out = appendDisclaimer(out);
+    return out;
+}
 // MAIN //
 /**
 * Main function.
@@ -261,6 +280,7 @@ async function main() {
     try {
         const embedding = await createEmbedding(question);
         const mostSimilar = await findMostSimilar(embedding, embeddings);
+        // Assemble history of the conversation (i.e., previous comments) if the event is a comment event:
         let conversationHistory;
         switch (github_1.context.eventName) {
             case 'issue_comment':
@@ -277,6 +297,7 @@ async function main() {
                 break;
         }
         (0, core_1.info)('Conversation history: ' + conversationHistory);
+        // Assemble prompt for OpenAI GPT-3 by concatenating the conversation history and the most relevant README.md sections:
         const prompt = PROMPT
             .replace('{{files}}', mostSimilar.map(x => {
             let readme = x.embedding.content;
@@ -303,15 +324,7 @@ async function main() {
             .replace('{{history}}', conversationHistory ? `History:\n${conversationHistory}\n` : '')
             .replace('{{question}}', question);
         (0, core_1.debug)('Assembled prompt: ' + prompt);
-        const completionResult = await openai.createCompletion({
-            'prompt': prompt,
-            'max_tokens': 1500,
-            'temperature': 0.5,
-            'top_p': 1,
-            'model': 'text-davinci-003'
-        });
-        (0, core_1.debug)('Successfully created completion.');
-        const answer = appendDisclaimer(completionResult.data.choices[0].text);
+        const answer = await generateAnswer(prompt);
         switch (github_1.context.eventName) {
             case 'issue_comment':
             case 'issues':
