@@ -21,24 +21,8 @@
 import { context } from '@actions/github';
 import { graphql, GraphQlQueryResponseData } from '@octokit/graphql';
 import { Octokit } from '@octokit/rest';
+import type { Comment, CreateCommentParams, CreateCommentResponse } from './types';
 
-
-// TYPES //
-
-import type { RestEndpointMethodTypes } from '@octokit/plugin-rest-endpoint-methods';
-type CreateCommentResponse = Promise<RestEndpointMethodTypes['issues']['createComment']['response']['data']>;
-type CreateCommentParams = {
-	owner: string;
-	repo: string;
-	issueNumber: number;
-	body: string;
-};
-type Comment = {
-	author: {
-		login: string;
-	};
-	body: string;
-};
 
 
 // VARIABLES //

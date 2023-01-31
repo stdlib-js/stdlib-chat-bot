@@ -19,15 +19,7 @@
 // MODULES //
 
 import { OpenAIApi , Configuration } from 'openai';
-
-
-// TYPES //
-
-type Embedding = {
-	package: string;
-	content: string;
-	embedding: number[];
-};
+import type { Embedding } from './types';
 
 
 // VARIABLES //
