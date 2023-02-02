@@ -113,7 +113,7 @@ function compressContent( text: string, removeCodeBlocks = true ): string {
 * @param history - previous conversation history with the bot
 * @returns assembled prompt
 */
-function assemblePrompt( question: string, mostSimilar: Embedding[], history: string ): string {
+function assemblePrompt( question: string, mostSimilar: Embedding[], history = '' ): string {
 	history = compressContent( history, false );
 	return PROMPT_TEMPLATE
 		.replace( '{{files}}', mostSimilar.map( x => {
