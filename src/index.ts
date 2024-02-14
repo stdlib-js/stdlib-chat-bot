@@ -19,7 +19,7 @@
 // MODULES //
 
 import { error, debug, info, getInput, setFailed } from '@actions/core';
-import { context } from '@actions/github'; '@octokit/plugin-rest-endpoint-methods';
+import { context } from '@actions/github';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { setupOpenAI, assemblePrompt, createEmbedding, findMostSimilar, generateAnswer } from './openai';

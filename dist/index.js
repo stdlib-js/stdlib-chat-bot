@@ -20,7 +20,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // MODULES //
 const core_1 = require("@actions/core");
 const github_1 = require("@actions/github");
-'@octokit/plugin-rest-endpoint-methods';
 const promises_1 = require("fs/promises");
 const path_1 = require("path");
 const openai_1 = require("./openai");
