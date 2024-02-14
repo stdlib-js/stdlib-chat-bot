@@ -1,6 +1,6 @@
 {
   "name": "stdlib-chat-bot",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A GitHub action that provides a stdlib chat bot for GitHub issues and discussions.",
   "main": "dist/index.js",
   "scripts": {
